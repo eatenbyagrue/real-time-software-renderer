@@ -1,0 +1,10 @@
+* 
+
+!README.md
+!.gitignore
+!.clang-format
+
+!*.hpp
+!*.c
+!*.h
+!*.cpp
