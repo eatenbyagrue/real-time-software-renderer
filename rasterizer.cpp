@@ -87,6 +87,8 @@ struct Transform {
 
 class Instance {
   public:
+    std::vector<Vec4D> vertices;
+    std::vector<Triangle> triangles;
     Model model;
     Transform transform;
     Instance(Model model, Transform transform) : model(model), transform(transform) {};
@@ -125,10 +127,10 @@ std::vector<double> interpolate(int i0, double d0, int i1, double d1) {
 /*Draw point with x and y coordinates*/
 void draw_point(SDL_Renderer *renderer, int x, int y) {
     // obviously ineffective, sanity checks
-    assert(-WINDOW_WIDTH / 2 <= x);
-    assert(x < WINDOW_WIDTH / 2);
-    assert(-WINDOW_HEIGHT / 2 <= y);
-    assert(y < WINDOW_HEIGHT / 2);
+    if (-WINDOW_WIDTH / 2 > x || x >= WINDOW_WIDTH / 2 || -WINDOW_HEIGHT / 2 > y ||
+        y >= WINDOW_HEIGHT / 2) {
+        return;
+    }
     int draw_x = WINDOW_WIDTH / 2 + x;
     int draw_y = WINDOW_HEIGHT / 2 - y;
     SDL_RenderDrawPoint(renderer, draw_x, draw_y);
@@ -299,15 +301,7 @@ Point project_vertex(Vec4D &h) {
                               h.v.at(1) * DISTANCE_D / h.v.at(2));
 }
 
-Scene create_scene() {
-    Scene scene;
-    Camera camera;
-    camera.position = Vec4D({0, 0, 0, 1});
-    camera.orientation = Vec4D({0, 0, 1, 0});
-    camera.original_orientation = Vec4D({0, 0, 1, 0});
-    camera.rotation_y = 0.0;
-    scene.camera = camera;
-
+Model create_cube() {
     Model model;
     model.model_type = ModelType::CUBE;
     model.vertices.emplace_back(1, 1, 1);
@@ -331,14 +325,24 @@ Scene create_scene() {
     model.triangles.emplace_back(4, 1, 0, PURPLE);
     model.triangles.emplace_back(2, 6, 7, CYAN);
     model.triangles.emplace_back(2, 7, 3, CYAN);
+    return model;
+};
+
+Scene create_scene() {
+    Scene scene;
+    Camera camera;
+    camera.position = Vec4D({0, 0, 0, 1});
+    camera.orientation = Vec4D({0, 0, 1, 0});
+    camera.original_orientation = Vec4D({0, 0, 1, 0});
+    camera.rotation_y = 0.0;
+    scene.camera = camera;
+
+    Model model = create_cube();
 
     scene.instances.emplace_back(model, Transform{1.0, 0.3, {-2, 0, 5.0}});
+    scene.instances.emplace_back(model, Transform{0.5, PI, {-2, 1, 8.0}});
+    scene.instances.emplace_back(model, Transform{1.0, 0.3, {5, -1, 10.0}});
 
-    Model cartesian_coordinates;
-    model.model_type = ModelType::CARTESIAN;
-    model.vertices.emplace_back(1, 0, 0);
-    model.vertices.emplace_back(0, 1, 0);
-    model.vertices.emplace_back(0, 0, 1);
     return scene;
 }
 
@@ -356,20 +360,26 @@ Matrix4D make_instance_transform_matrix(Transform transform) {
     return translation_matrix * rotation_matrix * scale_matrix;
 }
 
-void render_model(SDL_Renderer *renderer, Model &model, Matrix4D transform) {
+void transform_instance(Instance &instance, Matrix4D transform) {
+    // Throw out all vertices from the last frame
+    instance.vertices.clear();
+    for (Vertex &vertex : instance.model.vertices) {
+        Vec4D vec{vertex};
+        Vec4D transformed_vec = transform.times(vec);
+        instance.vertices.push_back(transformed_vec);
+    }
+}
+
+bool clip_instance(Instance &instance) { return true; };
+
+void draw_instance(SDL_Renderer *renderer, Instance &instance) {
     std::vector<Point> projected_vertices;
 
-    for (Vertex &vertex : model.vertices) {
-        Vec4D hovec{vertex};
-        /*std::cout << "VERTEX " << hovec.to_string() << std::endl;*/
-        Vec4D transformed_hovec = transform.times(hovec);
-        /*std::cout << transform;*/
-        /*std::cout << "TRANSFORMED VERTEX " << transformed_hovec.to_string() << std::endl;*/
-        /*std::cout << "############################################################" <<
-         * std::endl;*/
-        projected_vertices.push_back(project_vertex(transformed_hovec));
+    for (Vec4D &vertex : instance.vertices) {
+        projected_vertices.push_back(project_vertex(vertex));
     }
-    for (Triangle &triangle : model.triangles) {
+    // This has to be updated to instance.triangles one clipping is implemented!!
+    for (Triangle &triangle : instance.model.triangles) {
         /*draw_wireframe_triangle(renderer, projected_vertices.at(triangle.A),*/
         /*                        projected_vertices.at(triangle.B),*/
         /*                        projected_vertices.at(triangle.C), triangle.color);*/
@@ -379,13 +389,29 @@ void render_model(SDL_Renderer *renderer, Model &model, Matrix4D transform) {
     }
 }
 
-void render_scene(SDL_Renderer *renderer, Scene scene) {
+void render_scene(SDL_Renderer *renderer, Scene &scene) {
+    // transform_instance, clip_instance and draw_instance operate on instance in place
+
+    // transform scene
     Matrix4D m_camera = make_camera_matrix(scene.camera.position, scene.camera.rotation_y);
-    std::cout << m_camera << std::endl;
+
     for (Instance &instance : scene.instances) {
         Matrix4D m_transform = make_instance_transform_matrix(instance.transform);
         Matrix4D m_f = m_camera * m_transform;
-        render_model(renderer, instance.model, m_f);
+        transform_instance(instance, m_f);
+    }
+
+    // clip scene
+    std::vector<Instance> clipped_instances;
+    for (Instance &instance : scene.instances) {
+        if (clip_instance(instance)) {
+            clipped_instances.push_back(instance);
+        }
+    }
+
+    // draw scene
+    for (Instance &instance : clipped_instances) {
+        draw_instance(renderer, instance);
     }
 }
 
