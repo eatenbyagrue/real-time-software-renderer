@@ -7,28 +7,9 @@
 #include <string>
 #include <vector>
 
-Vertex::Vertex(double x, double y, double z) : x(x), y(y), z(z) {};
-std::string Vertex::to_string() {
-    return "x: " + std::to_string(this->x) + " y: " + std::to_string(this->y) +
-           " z: " + std::to_string(this->z);
-};
-
-Vertex Vertex::add(double rhs) { return Vertex{this->x + rhs, this->y + rhs, this->z + rhs}; }
-
-Vertex Vertex::add(std::array<double, 3> rhs) {
-    return Vertex{this->x + rhs.at(0), this->y + rhs.at(1), this->z + rhs.at(2)};
-};
-
-Vec4D::Vec4D() {}
+Vec4D::Vec4D() { this->set_0(); }
 
 Vec4D::Vec4D(std::array<double, 4> array) { this->v = array; }
-
-Vec4D::Vec4D(Vertex &vertex) {
-    this->v.at(0) = vertex.x;
-    this->v.at(1) = vertex.y;
-    this->v.at(2) = vertex.z;
-    this->v.at(3) = 1.0;
-}
 
 std::string Vec4D::to_string() {
     return "x: " + std::to_string(this->v.at(0)) + " y: " + std::to_string(this->v.at(1)) +
@@ -45,6 +26,12 @@ void Vec4D::operator+=(const Vec4D &rhs) {
     this->v.at(2) += rhs.v.at(2);
     this->v.at(3) += rhs.v.at(3);
 }
+void Vec4D::operator/=(double rhs) {
+    this->v.at(0) /= rhs;
+    this->v.at(1) /= rhs;
+    this->v.at(2) /= rhs;
+    this->v.at(3) /= rhs;
+}
 
 Vec4D Vec4D::operator*(const double rhs) {
     return Vec4D({
@@ -52,6 +39,14 @@ Vec4D Vec4D::operator*(const double rhs) {
         this->v.at(1) * rhs,
         this->v.at(2) * rhs,
         this->v.at(3) * rhs,
+    });
+}
+Vec4D Vec4D::operator-(const Vec4D &rhs) {
+    return Vec4D({
+        this->v.at(0) - rhs.v.at(0),
+        this->v.at(1) - rhs.v.at(1),
+        this->v.at(2) - rhs.v.at(2),
+        this->v.at(3) - rhs.v.at(3),
     });
 }
 
@@ -62,8 +57,34 @@ void Vec4D::set_0() {
     this->v.at(3) = 0;
 }
 
-/* Needed: Matrix4D 4x4 times 4x4, 4x4 times Vector 4x1, 3x4 times 4x1,   ...
- * */
+double Vec4D::norm() {
+    assert(this->v.at(3) == 0);
+    return sqrt(this->v.at(0) * this->v.at(0) + this->v.at(1) * this->v.at(1) +
+                this->v.at(2) * this->v.at(2));
+}
+
+double Vec4D::distance(Vec4D vector) {
+    // Assert that both are either vector or point (w coordinate is the same)
+    assert(this->v.at(3) == vector.v.at(3));
+    Vec4D difference = *this - vector;
+    return difference.norm();
+}
+
+Plane::Plane(std::array<double, 3> n, double d) : n(n), d(d) {}
+
+void Plane::normalize() {
+    double norm = sqrt(this->n.at(0) * this->n.at(0) + this->n.at(1) * this->n.at(1) +
+                       this->n.at(2) * this->n.at(2));
+    this->n.at(0) /= norm;
+    this->n.at(1) /= norm;
+    this->n.at(2) /= norm;
+}
+
+double Plane::signed_distance(Vec4D point) {
+    return this->n.at(0) * point.v.at(0) + this->n.at(1) * point.v.at(1) +
+           this->n.at(2) * point.v.at(2) + d;
+}
+
 Matrix4D::Matrix4D() {
     this->rows = 4;
     this->cols = 4;

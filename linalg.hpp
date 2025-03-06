@@ -5,16 +5,8 @@
 #include <string>
 #include <vector>
 
-// Just use a Vec4D later on
-class Vertex {
-  public:
-    double x, y, z;
-    Vertex(double x, double y, double z);
-    std::string to_string();
-    /* Returns a new vertex. */
-    Vertex add(double rhs);
-    /* Returns a new vertex */
-    Vertex add(std::array<double, 3> rhs);
+class Vec3D {
+    std::array<double, 3> v;
 };
 
 /*A 4-dimensional vector in homogenous coordinates*/
@@ -23,12 +15,31 @@ class Vec4D {
     std::array<double, 4> v;
     Vec4D();
     Vec4D(std::array<double, 4> array);
-    Vec4D(Vertex &vertex);
     std::string to_string();
     Vec4D operator-();
     void operator+=(const Vec4D &rhs);
+    void operator/=(double rhs);
     Vec4D operator*(const double rhs);
+    Vec4D operator-(const Vec4D &rhs);
+    // Sets all values of v to 0
     void set_0();
+    /*Calculates the length of the vector.*/
+    /*Only works for vectors, i.e. v.at(3) == 0. */
+    double norm();
+    double distance(Vec4D vector);
+};
+
+class Plane {
+  private:
+    std::array<double, 3> n;
+    double d;
+
+  public:
+    Plane(std::array<double, 3> n, double d);
+    // normalizes the plane normal to unit length
+    void normalize();
+    // Calculates the distance of the point from the plane
+    double signed_distance(Vec4D point);
 };
 
 class Matrix4D {

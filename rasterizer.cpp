@@ -73,7 +73,7 @@ struct Triangle {
 
 struct Model {
     ModelType model_type;
-    std::vector<Vertex> vertices;
+    std::vector<Vec4D> vertices;
     std::vector<Triangle> triangles;
 };
 
@@ -89,9 +89,32 @@ class Instance {
   public:
     std::vector<Vec4D> vertices;
     std::vector<Triangle> triangles;
+    Vec4D bounding_sphere_center;
+    double bounding_sphere_radius;
     Model model;
     Transform transform;
     Instance(Model model, Transform transform) : model(model), transform(transform) {};
+
+    // Averages all vertices
+    Vec4D calc_center() {
+        Vec4D result;
+        for (Vec4D &vertex : vertices) {
+            result += vertex;
+        }
+        result /= vertices.size();
+        return result;
+    }
+
+    // Find the distance to the vertex furthest away from the center
+    double calc_radius(Vec4D center) {
+        double result{0};
+        for (Vec4D &vertex : this->vertices) {
+            double dist = vertex.distance(center);
+            if (dist > result)
+                result = dist;
+        }
+        return result;
+    }
 };
 
 struct Camera {
@@ -100,6 +123,7 @@ struct Camera {
     Vec4D original_orientation;
     // This is just a crutch until I figure out full 3d movement of the camera
     double rotation_y;
+    std::vector<Plane> planes;
 };
 
 struct Scene {
@@ -304,14 +328,15 @@ Point project_vertex(Vec4D &h) {
 Model create_cube() {
     Model model;
     model.model_type = ModelType::CUBE;
-    model.vertices.emplace_back(1, 1, 1);
-    model.vertices.emplace_back(-1, 1, 1);
-    model.vertices.emplace_back(-1, -1, 1);
-    model.vertices.emplace_back(1, -1, 1);
-    model.vertices.emplace_back(1, 1, -1);
-    model.vertices.emplace_back(-1, 1, -1);
-    model.vertices.emplace_back(-1, -1, -1);
-    model.vertices.emplace_back(1, -1, -1);
+    std::array<double, 4> derp{1, 1, 1, 1};
+    model.vertices.push_back(Vec4D({1.0, 1.0, 1.0, 1.0}));
+    model.vertices.push_back(Vec4D({-1, 1, 1, 1}));
+    model.vertices.push_back(Vec4D({-1, -1, 1, 1}));
+    model.vertices.push_back(Vec4D({1, -1, 1, 1}));
+    model.vertices.push_back(Vec4D({1, 1, -1, 1}));
+    model.vertices.push_back(Vec4D({-1, 1, -1, 1}));
+    model.vertices.push_back(Vec4D({-1, -1, -1, 1}));
+    model.vertices.push_back(Vec4D({1, -1, -1, 1}));
 
     model.triangles.emplace_back(0, 1, 2, RED);
     model.triangles.emplace_back(0, 2, 3, RED);
@@ -325,6 +350,7 @@ Model create_cube() {
     model.triangles.emplace_back(4, 1, 0, PURPLE);
     model.triangles.emplace_back(2, 6, 7, CYAN);
     model.triangles.emplace_back(2, 7, 3, CYAN);
+
     return model;
 };
 
@@ -335,6 +361,25 @@ Scene create_scene() {
     camera.orientation = Vec4D({0, 0, 1, 0});
     camera.original_orientation = Vec4D({0, 0, 1, 0});
     camera.rotation_y = 0.0;
+
+    // Define camera frustrum
+    std::vector<Plane> planes;
+    Plane p_near{{0, 0, 1}, -DISTANCE_D};
+    p_near.normalize();
+    planes.push_back(p_near);
+    Plane p_left{{DISTANCE_D, 0, VIEWPORT_WIDTH / 2.0}, 0};
+    p_left.normalize();
+    planes.push_back(p_left);
+    Plane p_right{{-DISTANCE_D, 0, VIEWPORT_WIDTH / 2.0}, 0};
+    p_right.normalize();
+    planes.push_back(p_right);
+    Plane p_bottom{{0, DISTANCE_D, VIEWPORT_HEIGHT / 2.0}, 0};
+    p_bottom.normalize();
+    planes.push_back(p_bottom);
+    Plane p_top{{0, -DISTANCE_D, VIEWPORT_HEIGHT / 2.0}, 0};
+    p_top.normalize();
+
+    camera.planes = planes;
     scene.camera = camera;
 
     Model model = create_cube();
@@ -363,14 +408,20 @@ Matrix4D make_instance_transform_matrix(Transform transform) {
 void transform_instance(Instance &instance, Matrix4D transform) {
     // Throw out all vertices from the last frame
     instance.vertices.clear();
-    for (Vertex &vertex : instance.model.vertices) {
-        Vec4D vec{vertex};
-        Vec4D transformed_vec = transform.times(vec);
-        instance.vertices.push_back(transformed_vec);
+    for (Vec4D &vertex : instance.model.vertices) {
+        Vec4D transformed_vertex = transform.times(vertex);
+        instance.vertices.push_back(transformed_vertex);
     }
 }
 
-bool clip_instance(Instance &instance) { return true; };
+bool clip_instance(Instance &instance, std::vector<Plane> planes) {
+    for (Plane &plane : planes) {
+        Vec4D instance_center = instance.calc_center();
+        // ...
+    }
+
+    return true;
+};
 
 void draw_instance(SDL_Renderer *renderer, Instance &instance) {
     std::vector<Point> projected_vertices;
@@ -378,11 +429,13 @@ void draw_instance(SDL_Renderer *renderer, Instance &instance) {
     for (Vec4D &vertex : instance.vertices) {
         projected_vertices.push_back(project_vertex(vertex));
     }
-    // This has to be updated to instance.triangles one clipping is implemented!!
+    // This has to be updated to instance.triangles one clipping is
+    // implemented!!
     for (Triangle &triangle : instance.model.triangles) {
         /*draw_wireframe_triangle(renderer, projected_vertices.at(triangle.A),*/
         /*                        projected_vertices.at(triangle.B),*/
-        /*                        projected_vertices.at(triangle.C), triangle.color);*/
+        /*                        projected_vertices.at(triangle.C),
+         * triangle.color);*/
         draw_wireframe_triangle(renderer, projected_vertices.at(triangle.A),
                                 projected_vertices.at(triangle.B),
                                 projected_vertices.at(triangle.C), triangle.color);
@@ -390,7 +443,8 @@ void draw_instance(SDL_Renderer *renderer, Instance &instance) {
 }
 
 void render_scene(SDL_Renderer *renderer, Scene &scene) {
-    // transform_instance, clip_instance and draw_instance operate on instance in place
+    // transform_instance, clip_instance and draw_instance operate on instance
+    // in place
 
     // transform scene
     Matrix4D m_camera = make_camera_matrix(scene.camera.position, scene.camera.rotation_y);
@@ -404,7 +458,7 @@ void render_scene(SDL_Renderer *renderer, Scene &scene) {
     // clip scene
     std::vector<Instance> clipped_instances;
     for (Instance &instance : scene.instances) {
-        if (clip_instance(instance)) {
+        if (clip_instance(instance, scene.camera.planes)) {
             clipped_instances.push_back(instance);
         }
     }
@@ -416,7 +470,6 @@ void render_scene(SDL_Renderer *renderer, Scene &scene) {
 }
 
 int main(int argc, char *argv[]) {
-
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "Could not init SDL: %s\n", SDL_GetError());
         return 1;
@@ -468,12 +521,16 @@ int main(int argc, char *argv[]) {
                     camera_speed = -scene.camera.orientation * 0.01;
                 }
 
-                /*printf("sym %i scancode %i\n", evt.key.keysym.sym, evt.key.keysym.scancode);*/
+                /*printf("sym %i scancode %i\n", evt.key.keysym.sym,
+                 * evt.key.keysym.scancode);*/
                 /*std::cout << "Scancode: " << evt.key.keysym.scancode << " ("*/
-                /*<< SDL_GetScancodeName(static_cast<SDL_Scancode>(evt.key.keysym.scancode))*/
+                /*<<
+                 * SDL_GetScancodeName(static_cast<SDL_Scancode>(evt.key.keysym.scancode))*/
                 /*<< ")\n";*/
-                /*std::cout << "Scancode " << event.key.keysym.scancode << "\n";*/
-                /*std::cout << "Sym " << SDL_GetKeyName(event.key.keysym.sym) << "\n";*/
+                /*std::cout << "Scancode " << event.key.keysym.scancode <<
+                 * "\n";*/
+                /*std::cout << "Sym " << SDL_GetKeyName(event.key.keysym.sym) <<
+                 * "\n";*/
                 /*}*/
                 break;
             case SDL_KEYUP:
@@ -492,7 +549,8 @@ int main(int argc, char *argv[]) {
         }
 
         scene.camera.rotation_y += y_rot_speed;
-        // This is a crutch and should be changed once I figure out camera movement!
+        // This is a crutch and should be changed once I figure out camera
+        // movement!
         scene.camera.orientation = (Matrix4D::create_rotation_matrix(scene.camera.rotation_y, 1))
                                        .T()
                                        .times(scene.camera.original_orientation);
