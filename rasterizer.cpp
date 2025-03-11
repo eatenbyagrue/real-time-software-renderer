@@ -3,6 +3,7 @@
 /*#include "SDL_render.h"*/
 #include "SDL_scancode.h"
 #include "linalg.hpp"
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
@@ -396,16 +397,16 @@ Scene create_scene() {
 
 // Change the 2nd parameter to camera.orientation once I figure out camera movement
 Matrix4D make_camera_matrix(Vec4D position, double rotation_y) {
-    Matrix4D m_rot = Matrix4D::create_rotation_matrix(rotation_y, 1);
-    Matrix4D m_tra = Matrix4D::create_translation_matrix(-position);
-    return m_rot * m_tra;
+    Matrix4D m_rotation = Matrix4D::create_rotation_matrix(rotation_y, 1);
+    Matrix4D m_translation = Matrix4D::create_translation_matrix(-position);
+    return m_rotation * m_translation;
 }
 
 Matrix4D make_instance_transform_matrix(Transform transform) {
-    Matrix4D scale_matrix = Matrix4D::create_scale_matrix(transform.scale);
-    Matrix4D rotation_matrix = Matrix4D::create_rotation_matrix(transform.rotation_y, 1);
-    Matrix4D translation_matrix = Matrix4D::create_translation_matrix(transform.translation);
-    return translation_matrix * rotation_matrix * scale_matrix;
+    Matrix4D m_scale = Matrix4D::create_scale_matrix(transform.scale);
+    Matrix4D m_rotation = Matrix4D::create_rotation_matrix(transform.rotation_y, 1);
+    Matrix4D m_translation = Matrix4D::create_translation_matrix(transform.translation);
+    return m_translation * m_rotation * m_scale;
 }
 
 Instance transform_instance(Instance &instance, Matrix4D transform) {
@@ -417,9 +418,41 @@ Instance transform_instance(Instance &instance, Matrix4D transform) {
     return transformed_instance;
 }
 
-Instance clip_instance(Instance &instance, std::vector<Plane> planes) {
+Instance clip_instance_against_plane(Instance &instance, Plane &plane) {
     Instance clipped_instance = instance;
     std::vector<Triangle> clipped_triangles;
+    for (Triangle &triangle : instance.triangles) {
+        std::array<double, 3> distances;
+        distances.at(0) = plane.signed_distance(clipped_instance.vertices.at(triangle.A));
+        distances.at(1) = plane.signed_distance(clipped_instance.vertices.at(triangle.B));
+        distances.at(2) = plane.signed_distance(clipped_instance.vertices.at(triangle.C));
+
+        // Sort in ascending order
+        std::sort(distances.begin(), distances.end());
+        // Count positive distances;
+        int count_positive =
+            std::count_if(distances.begin(), distances.end(), [](int d) { return d >= 0; });
+        switch (count_positive) {
+        case 3:
+            clipped_triangles.push_back(triangle);
+            break;
+        case 0:
+            break;
+        case 1:
+            break;
+        case 2:
+            break;
+        }
+    }
+    clipped_instance.triangles = clipped_triangles;
+    return clipped_instance;
+}
+
+Instance clip_instance(Instance &instance, std::vector<Plane> planes) {
+    Instance clipped_instance = instance;
+    for (Plane &plane : planes) {
+        clipped_instance = clip_instance_against_plane(clipped_instance, plane);
+    }
     return clipped_instance;
 };
 
@@ -445,8 +478,8 @@ void draw_instance(SDL_Renderer *renderer, Instance &instance) {
 Visibility is_instance_visible(Instance &instance, std::vector<Plane> planes) {
     bool partiality{false};
     for (Plane &plane : planes) {
-        // Inefficient to do every frame, calculate once on creation and then transform center
-        // along with rest
+        // Inefficient to do every frame, calculate once on creation and then
+        // transform center along with rest
         Vec4D instance_center = instance.calc_center();
         double r = instance.calc_radius(instance_center);
         double d = plane.signed_distance(instance_center);

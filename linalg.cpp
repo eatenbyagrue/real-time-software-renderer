@@ -82,7 +82,7 @@ void Plane::normalize() {
 
 double Plane::signed_distance(Vec4D point) {
     return this->n.at(0) * point.v.at(0) + this->n.at(1) * point.v.at(1) +
-           this->n.at(2) * point.v.at(2) + d;
+           this->n.at(2) * point.v.at(2) + this->d;
 }
 
 Matrix4D::Matrix4D() {
