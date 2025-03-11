@@ -21,12 +21,14 @@
 /*#define VIEWPORT_HEIGHT 9*/
 #define VIEWPORT_WIDTH 8.0
 #define VIEWPORT_HEIGHT 4.5
-#define DISTANCE_D 4.0
+#define DISTANCE_D 4.5
 #define PI 3.14159265
 
 struct Color {
     int r, g, b, a;
 };
+
+enum struct Visibility { FULL, PARTIAL, NONE };
 
 Color RED{255, 0, 0, 0};
 Color GREEN{0, 255, 0, 0};
@@ -96,12 +98,13 @@ class Instance {
     Instance(Model model, Transform transform) : model(model), transform(transform) {};
 
     // Averages all vertices
+    // This is terribly inefficient to do each frame
     Vec4D calc_center() {
         Vec4D result;
-        for (Vec4D &vertex : vertices) {
+        for (Vec4D &vertex : this->vertices) {
             result += vertex;
         }
-        result /= vertices.size();
+        result /= this->vertices.size();
         return result;
     }
 
@@ -264,7 +267,7 @@ void draw_filled_triangle(SDL_Renderer *renderer, Point p0, Point p1, Point p2, 
     }
 }
 
-/* There are some serious bugs in here! */
+/* There are some bugs in here! */
 void draw_shaded_triangle(SDL_Renderer *renderer, Point &p0, Point &p1, Point &p2, Color &color) {
     if (p1.y < p0.y)
         p1.swap(p0);
@@ -364,7 +367,7 @@ Scene create_scene() {
 
     // Define camera frustrum
     std::vector<Plane> planes;
-    Plane p_near{{0, 0, 1}, -DISTANCE_D};
+    Plane p_near{{0, 0, 1}, -DISTANCE_D / 2};
     p_near.normalize();
     planes.push_back(p_near);
     Plane p_left{{DISTANCE_D, 0, VIEWPORT_WIDTH / 2.0}, 0};
@@ -405,22 +408,19 @@ Matrix4D make_instance_transform_matrix(Transform transform) {
     return translation_matrix * rotation_matrix * scale_matrix;
 }
 
-void transform_instance(Instance &instance, Matrix4D transform) {
-    // Throw out all vertices from the last frame
-    instance.vertices.clear();
-    for (Vec4D &vertex : instance.model.vertices) {
+Instance transform_instance(Instance &instance, Matrix4D transform) {
+    Instance transformed_instance = instance;
+    for (Vec4D &vertex : transformed_instance.model.vertices) {
         Vec4D transformed_vertex = transform.times(vertex);
-        instance.vertices.push_back(transformed_vertex);
+        transformed_instance.vertices.push_back(transformed_vertex);
     }
+    return transformed_instance;
 }
 
-bool clip_instance(Instance &instance, std::vector<Plane> planes) {
-    for (Plane &plane : planes) {
-        Vec4D instance_center = instance.calc_center();
-        // ...
-    }
-
-    return true;
+Instance clip_instance(Instance &instance, std::vector<Plane> planes) {
+    Instance clipped_instance = instance;
+    std::vector<Triangle> clipped_triangles;
+    return clipped_instance;
 };
 
 void draw_instance(SDL_Renderer *renderer, Instance &instance) {
@@ -442,24 +442,58 @@ void draw_instance(SDL_Renderer *renderer, Instance &instance) {
     }
 }
 
+Visibility is_instance_visible(Instance &instance, std::vector<Plane> planes) {
+    bool partiality{false};
+    for (Plane &plane : planes) {
+        // Inefficient to do every frame, calculate once on creation and then transform center
+        // along with rest
+        Vec4D instance_center = instance.calc_center();
+        double r = instance.calc_radius(instance_center);
+        double d = plane.signed_distance(instance_center);
+        if (d < -r)
+            // Instance is completely out of view
+            return Visibility::NONE;
+        else if (d < r) {
+            // Instance is partially out of view
+            partiality = true;
+        }
+    }
+    // Instance is at least partially in view
+    if (partiality)
+        return Visibility::PARTIAL;
+    return Visibility::FULL;
+}
+
 void render_scene(SDL_Renderer *renderer, Scene &scene) {
-    // transform_instance, clip_instance and draw_instance operate on instance
-    // in place
+    // clip_instance and draw_instance operate on instance in place
 
     // transform scene
     Matrix4D m_camera = make_camera_matrix(scene.camera.position, scene.camera.rotation_y);
 
+    std::vector<Instance> transformed_instances;
     for (Instance &instance : scene.instances) {
         Matrix4D m_transform = make_instance_transform_matrix(instance.transform);
         Matrix4D m_f = m_camera * m_transform;
-        transform_instance(instance, m_f);
+        transformed_instances.push_back(transform_instance(instance, m_f));
     }
 
     // clip scene
     std::vector<Instance> clipped_instances;
-    for (Instance &instance : scene.instances) {
-        if (clip_instance(instance, scene.camera.planes)) {
+    for (Instance &instance : transformed_instances) {
+        // If instance is fully visible, take it as is.
+        // If instance is only partially visible, determine on triangle basis.
+        // If instance is completely out of view, discard.
+        switch (is_instance_visible(instance, scene.camera.planes)) {
+        case (Visibility::FULL):
             clipped_instances.push_back(instance);
+            break;
+        case (Visibility::PARTIAL):
+            clipped_instances.push_back(clip_instance(instance, scene.camera.planes));
+            break;
+        case (Visibility::NONE):
+            break;
+        default:
+            break;
         }
     }
 
