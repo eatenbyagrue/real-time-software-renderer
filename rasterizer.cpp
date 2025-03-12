@@ -439,19 +439,51 @@ Instance clip_instance_against_plane(Instance &instance, Plane &plane) {
                                            [](const auto &d) { return d.first >= 0; });
 
         switch (count_positive) {
-        case 3:
+        case 3: {
             // If all three distances are positive, keep the triangle as is
             clipped_triangles.push_back(triangle);
             break;
-        case 0:
+        }
+        case 0: {
             // If all three distances are negative, discard the triangle
             break;
-        case 1:
+        }
+        case 1: {
             // If only one distance is positive, make new triangle
+            // The positive distance is the last element
+            Vec4D A = clipped_instance.vertices.at(distances_vertices.at(2).second);
+            Vec4D B = clipped_instance.vertices.at(distances_vertices.at(0).second);
+            Vec4D C = clipped_instance.vertices.at(distances_vertices.at(1).second);
+            Vec4D B_ = plane.intersect(A, B);
+            Vec4D C_ = plane.intersect(A, B);
+            clipped_instance.vertices.push_back(B_);
+            int B_index = clipped_instance.vertices.size() - 1;
+            clipped_instance.vertices.push_back(C_);
+            int C_index = clipped_instance.vertices.size() - 1;
+            Triangle tria =
+                Triangle(distances_vertices.at(2).second, B_index, C_index, triangle.color);
+            clipped_triangles.push_back(tria);
             break;
-        case 2:
+        }
+        case 2: {
             // If two distances are positive, make two new triangles
+            // The negative distance is the first element
+            Vec4D C = clipped_instance.vertices.at(distances_vertices.at(0).second);
+            Vec4D A = clipped_instance.vertices.at(distances_vertices.at(1).second);
+            Vec4D B = clipped_instance.vertices.at(distances_vertices.at(2).second);
+            Vec4D A_ = plane.intersect(A, C);
+            Vec4D B_ = plane.intersect(A, C);
+            clipped_instance.vertices.push_back(A_);
+            int A_index = clipped_instance.vertices.size() - 1;
+            clipped_instance.vertices.push_back(B_);
+            int B_index = clipped_instance.vertices.size() - 1;
+            Triangle tria =
+                Triangle(distances_vertices.at(1).second, B_index, A_index, triangle.color);
+            Triangle tria2 =
+                Triangle(A_index, distances_vertices.at(2).second, B_index, triangle.color);
+            clipped_triangles.push_back(tria);
             break;
+        }
         }
     }
     clipped_instance.triangles = clipped_triangles;
