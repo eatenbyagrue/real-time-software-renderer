@@ -368,19 +368,19 @@ Scene create_scene() {
 
     // Define camera frustrum
     std::vector<Plane> planes;
-    Plane p_near{{0, 0, 1}, -DISTANCE_D / 2};
+    Plane p_near{Vec4D({0, 0, 1, 0}), -DISTANCE_D / 2};
     p_near.normalize();
     planes.push_back(p_near);
-    Plane p_left{{DISTANCE_D, 0, VIEWPORT_WIDTH / 2.0}, 0};
+    Plane p_left{Vec4D({DISTANCE_D, 0, VIEWPORT_WIDTH / 2.0, 0}), 0};
     p_left.normalize();
     planes.push_back(p_left);
-    Plane p_right{{-DISTANCE_D, 0, VIEWPORT_WIDTH / 2.0}, 0};
+    Plane p_right{Vec4D({-DISTANCE_D, 0, VIEWPORT_WIDTH / 2.0, 0}), 0};
     p_right.normalize();
     planes.push_back(p_right);
-    Plane p_bottom{{0, DISTANCE_D, VIEWPORT_HEIGHT / 2.0}, 0};
+    Plane p_bottom{Vec4D({0, DISTANCE_D, VIEWPORT_HEIGHT / 2.0, 0}), 0};
     p_bottom.normalize();
     planes.push_back(p_bottom);
-    Plane p_top{{0, -DISTANCE_D, VIEWPORT_HEIGHT / 2.0}, 0};
+    Plane p_top{Vec4D({0, -DISTANCE_D, VIEWPORT_HEIGHT / 2.0, 0}), 0};
     p_top.normalize();
 
     camera.planes = planes;
@@ -422,25 +422,35 @@ Instance clip_instance_against_plane(Instance &instance, Plane &plane) {
     Instance clipped_instance = instance;
     std::vector<Triangle> clipped_triangles;
     for (Triangle &triangle : instance.triangles) {
-        std::array<double, 3> distances;
-        distances.at(0) = plane.signed_distance(clipped_instance.vertices.at(triangle.A));
-        distances.at(1) = plane.signed_distance(clipped_instance.vertices.at(triangle.B));
-        distances.at(2) = plane.signed_distance(clipped_instance.vertices.at(triangle.C));
+        // save the distances and triangle point indices in pairs
+        std::array<std::pair<double, int>, 3> distances_vertices;
+        distances_vertices.at(0) = {plane.signed_distance(clipped_instance.vertices.at(triangle.A)),
+                                    triangle.A};
+        distances_vertices.at(1) = {plane.signed_distance(clipped_instance.vertices.at(triangle.B)),
+                                    triangle.B};
+        distances_vertices.at(2) = {plane.signed_distance(clipped_instance.vertices.at(triangle.C)),
+                                    triangle.C};
 
-        // Sort in ascending order
-        std::sort(distances.begin(), distances.end());
-        // Count positive distances;
-        int count_positive =
-            std::count_if(distances.begin(), distances.end(), [](int d) { return d >= 0; });
+        // Sort in ascending order by distance
+        std::sort(distances_vertices.begin(), distances_vertices.end(),
+                  [](const auto &a, const auto &b) { return a.first < b.first; });
+        // Count positive distances
+        int count_positive = std::count_if(distances_vertices.begin(), distances_vertices.end(),
+                                           [](const auto &d) { return d.first >= 0; });
+
         switch (count_positive) {
         case 3:
+            // If all three distances are positive, keep the triangle as is
             clipped_triangles.push_back(triangle);
             break;
         case 0:
+            // If all three distances are negative, discard the triangle
             break;
         case 1:
+            // If only one distance is positive, make new triangle
             break;
         case 2:
+            // If two distances are positive, make two new triangles
             break;
         }
     }

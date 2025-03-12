@@ -9,7 +9,7 @@
 
 Vec4D::Vec4D() { this->set_0(); }
 
-Vec4D::Vec4D(std::array<double, 4> array) { this->v = array; }
+Vec4D::Vec4D(std::array<double, 4> array) : v(array) {}
 
 std::string Vec4D::to_string() {
     return "x: " + std::to_string(this->v.at(0)) + " y: " + std::to_string(this->v.at(1)) +
@@ -49,6 +49,14 @@ Vec4D Vec4D::operator-(const Vec4D &rhs) {
         this->v.at(3) - rhs.v.at(3),
     });
 }
+Vec4D Vec4D::operator+(const Vec4D &rhs) {
+    return Vec4D({
+        this->v.at(0) + rhs.v.at(0),
+        this->v.at(1) + rhs.v.at(1),
+        this->v.at(2) + rhs.v.at(2),
+        this->v.at(3) + rhs.v.at(3),
+    });
+}
 
 void Vec4D::set_0() {
     this->v.at(0) = 0;
@@ -58,9 +66,9 @@ void Vec4D::set_0() {
 }
 
 double Vec4D::norm() {
+    // Only works for vectors!
     assert(this->v.at(3) == 0);
-    return sqrt(this->v.at(0) * this->v.at(0) + this->v.at(1) * this->v.at(1) +
-                this->v.at(2) * this->v.at(2));
+    return sqrt(this->dot(*this));
 }
 
 double Vec4D::distance(Vec4D vector) {
@@ -70,19 +78,25 @@ double Vec4D::distance(Vec4D vector) {
     return difference.norm();
 }
 
-Plane::Plane(std::array<double, 3> n, double d) : n(n), d(d) {}
-
-void Plane::normalize() {
-    double norm = sqrt(this->n.at(0) * this->n.at(0) + this->n.at(1) * this->n.at(1) +
-                       this->n.at(2) * this->n.at(2));
-    this->n.at(0) /= norm;
-    this->n.at(1) /= norm;
-    this->n.at(2) /= norm;
+double Vec4D::dot(Vec4D rhs) {
+    // Surprise, just a wrapper for the lengthy std function
+    return std::inner_product(this->v.begin(), this->v.end(), rhs.v.begin(), 0.0);
 }
 
-double Plane::signed_distance(Vec4D point) {
-    return this->n.at(0) * point.v.at(0) + this->n.at(1) * point.v.at(1) +
-           this->n.at(2) * point.v.at(2) + this->d;
+Plane::Plane(Vec4D n, double d) : n(n), d(d) {}
+
+void Plane::normalize() {
+    double norm = sqrt(this->n.dot(this->n));
+    this->n /= norm;
+}
+
+double Plane::signed_distance(Vec4D point) { return this->n.dot(point) + this->d; }
+
+Vec4D Plane::intersect(Vec4D A, Vec4D B) {
+    Vec4D result;
+    double t = (-this->d - this->n.dot(A)) / this->n.dot(B - A);
+    result = A + ((B - A) * t);
+    return result;
 }
 
 Matrix4D::Matrix4D() {

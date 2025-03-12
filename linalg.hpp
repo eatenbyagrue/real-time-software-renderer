@@ -18,28 +18,35 @@ class Vec4D {
     std::string to_string();
     Vec4D operator-();
     void operator+=(const Vec4D &rhs);
+    Vec4D operator-(const Vec4D &rhs);
+    Vec4D operator+(const Vec4D &rhs);
     void operator/=(double rhs);
     Vec4D operator*(const double rhs);
-    Vec4D operator-(const Vec4D &rhs);
-    // Sets all values of v to 0
+    /*Sets all values of v to 0*/
     void set_0();
     /*Calculates the length of the vector.*/
     /*Only works for vectors, i.e. v.at(3) == 0. */
     double norm();
     double distance(Vec4D vector);
+    /*Calculates the dot product between this vector and another*/
+    /*Careful use required if 4th coordinate is not equal to 0.0, since it is used in the
+     * calculation, too!*/
+    double dot(Vec4D rhs);
 };
 
 class Plane {
   private:
-    std::array<double, 3> n;
+    Vec4D n;
     double d;
 
   public:
-    Plane(std::array<double, 3> n, double d);
+    Plane(Vec4D n, double d);
     // normalizes the plane normal to unit length
     void normalize();
     // Calculates the distance of the point from the plane
     double signed_distance(Vec4D point);
+    // Calculates the intersection of the plane and a line given by two points
+    Vec4D intersect(Vec4D A, Vec4D B);
 };
 
 class Matrix4D {
