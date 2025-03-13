@@ -37,6 +37,7 @@ Color BLUE{0, 0, 255, 0};
 Color YELLOW{255, 255, 0, 0};
 Color PURPLE{128, 0, 128, 0};
 Color CYAN{0, 255, 255, 0};
+Color WHITE{255, 255, 255, 0};
 
 enum class ModelType {
     CUBE,
@@ -415,12 +416,14 @@ Instance transform_instance(Instance &instance, Matrix4D transform) {
         Vec4D transformed_vertex = transform.times(vertex);
         transformed_instance.vertices.push_back(transformed_vertex);
     }
+    transformed_instance.triangles = instance.model.triangles;
     return transformed_instance;
 }
 
 Instance clip_instance_against_plane(Instance &instance, Plane &plane) {
     Instance clipped_instance = instance;
     std::vector<Triangle> clipped_triangles;
+
     for (Triangle &triangle : instance.triangles) {
         // save the distances and triangle point indices in pairs
         std::array<std::pair<double, int>, 3> distances_vertices;
@@ -449,39 +452,47 @@ Instance clip_instance_against_plane(Instance &instance, Plane &plane) {
             break;
         }
         case 1: {
+            std::cout << "CASE 1" << std::endl;
             // If only one distance is positive, make new triangle
             // The positive distance is the last element
-            Vec4D A = clipped_instance.vertices.at(distances_vertices.at(2).second);
-            Vec4D B = clipped_instance.vertices.at(distances_vertices.at(0).second);
-            Vec4D C = clipped_instance.vertices.at(distances_vertices.at(1).second);
-            Vec4D B_ = plane.intersect(A, B);
-            Vec4D C_ = plane.intersect(A, B);
-            clipped_instance.vertices.push_back(B_);
-            int B_index = clipped_instance.vertices.size() - 1;
-            clipped_instance.vertices.push_back(C_);
-            int C_index = clipped_instance.vertices.size() - 1;
-            Triangle tria =
-                Triangle(distances_vertices.at(2).second, B_index, C_index, triangle.color);
+            int A_index = distances_vertices.at(2).second;
+            int B_index = distances_vertices.at(0).second;
+            int C_index = distances_vertices.at(1).second;
+            Vec4D A = clipped_instance.vertices.at(A_index);
+            Vec4D B = clipped_instance.vertices.at(B_index);
+            Vec4D C = clipped_instance.vertices.at(C_index);
+            Vec4D B_prime = plane.intersect(A, B);
+            Vec4D C_prime = plane.intersect(A, C);
+            clipped_instance.vertices.push_back(B_prime);
+            int B_prime_index = clipped_instance.vertices.size() - 1;
+            clipped_instance.vertices.push_back(C_prime);
+            int C_prime_index = clipped_instance.vertices.size() - 1;
+            /*Triangle tria =*/
+            /*    Triangle(distances_vertices.at(2).second, B_index, C_index, triangle.color);*/
+            Triangle tria = Triangle(A_index, B_index, C_index, triangle.color);
             clipped_triangles.push_back(tria);
             break;
         }
         case 2: {
             // If two distances are positive, make two new triangles
             // The negative distance is the first element
-            Vec4D C = clipped_instance.vertices.at(distances_vertices.at(0).second);
-            Vec4D A = clipped_instance.vertices.at(distances_vertices.at(1).second);
-            Vec4D B = clipped_instance.vertices.at(distances_vertices.at(2).second);
-            Vec4D A_ = plane.intersect(A, C);
-            Vec4D B_ = plane.intersect(A, C);
-            clipped_instance.vertices.push_back(A_);
-            int A_index = clipped_instance.vertices.size() - 1;
-            clipped_instance.vertices.push_back(B_);
-            int B_index = clipped_instance.vertices.size() - 1;
-            Triangle tria =
-                Triangle(distances_vertices.at(1).second, B_index, A_index, triangle.color);
-            Triangle tria2 =
-                Triangle(A_index, distances_vertices.at(2).second, B_index, triangle.color);
+            std::cout << "CASE 2" << std::endl;
+            int C_index = distances_vertices.at(0).second;
+            int A_index = distances_vertices.at(1).second;
+            int B_index = distances_vertices.at(2).second;
+            Vec4D C = clipped_instance.vertices.at(C_index);
+            Vec4D A = clipped_instance.vertices.at(A_index);
+            Vec4D B = clipped_instance.vertices.at(B_index);
+            Vec4D A_prime = plane.intersect(A, C);
+            Vec4D B_prime = plane.intersect(B, C);
+            clipped_instance.vertices.push_back(A_prime);
+            int A_prime_index = clipped_instance.vertices.size() - 1;
+            clipped_instance.vertices.push_back(B_prime);
+            int B_prime_index = clipped_instance.vertices.size() - 1;
+            Triangle tria = Triangle(A_index, B_index, A_prime_index, triangle.color);
+            Triangle tria2 = Triangle(A_prime_index, B_index, B_prime_index, triangle.color);
             clipped_triangles.push_back(tria);
+            clipped_triangles.push_back(tria2);
             break;
         }
         }
@@ -504,9 +515,7 @@ void draw_instance(SDL_Renderer *renderer, Instance &instance) {
     for (Vec4D &vertex : instance.vertices) {
         projected_vertices.push_back(project_vertex(vertex));
     }
-    // This has to be updated to instance.triangles one clipping is
-    // implemented!!
-    for (Triangle &triangle : instance.model.triangles) {
+    for (Triangle &triangle : instance.triangles) {
         /*draw_wireframe_triangle(renderer, projected_vertices.at(triangle.A),*/
         /*                        projected_vertices.at(triangle.B),*/
         /*                        projected_vertices.at(triangle.C),
