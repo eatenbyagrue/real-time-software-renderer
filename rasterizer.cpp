@@ -3,6 +3,7 @@
 /*#include "SDL_render.h"*/
 #include "SDL_scancode.h"
 #include "linalg.hpp"
+#include "profiler.hpp"
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -29,7 +30,7 @@ struct Color {
     int r, g, b, a;
 };
 
-enum struct Visibility { FULL, PARTIAL, NONE };
+enum class Visibility { FULL, PARTIAL, NONE };
 
 Color RED{255, 0, 0, 0};
 Color GREEN{0, 255, 0, 0};
@@ -155,7 +156,6 @@ std::vector<double> interpolate(int i0, double d0, int i1, double d1) {
 
 /*Draw point with x and y coordinates*/
 void draw_point(SDL_Renderer *renderer, int x, int y) {
-    // obviously ineffective, sanity checks
     if (-WINDOW_WIDTH / 2 > x || x >= WINDOW_WIDTH / 2 || -WINDOW_HEIGHT / 2 > y ||
         y >= WINDOW_HEIGHT / 2) {
         return;
@@ -165,11 +165,10 @@ void draw_point(SDL_Renderer *renderer, int x, int y) {
     SDL_RenderDrawPoint(renderer, draw_x, draw_y);
 }
 
-/*Draw point with x and y coordinates and color*/
-void draw_point(SDL_Renderer *renderer, int x, int y, Color &color) {
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-    SDL_RenderDrawPoint(renderer, x, y);
-}
+/*void draw_point(SDL_Renderer *renderer, int x, int y, Color &color) {*/
+/*    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);*/
+/*    SDL_RenderDrawPoint(renderer, x, y);*/
+/*}*/
 
 void draw_line(SDL_Renderer *renderer, Point p0, Point p1) {
     int dx{p1.x - p0.x};
@@ -452,7 +451,6 @@ Instance clip_instance_against_plane(Instance &instance, Plane &plane) {
             break;
         }
         case 1: {
-            std::cout << "CASE 1" << std::endl;
             // If only one distance is positive, make new triangle
             // The positive distance is the last element
             int A_index = distances_vertices.at(2).second;
@@ -476,7 +474,6 @@ Instance clip_instance_against_plane(Instance &instance, Plane &plane) {
         case 2: {
             // If two distances are positive, make two new triangles
             // The negative distance is the first element
-            std::cout << "CASE 2" << std::endl;
             int C_index = distances_vertices.at(0).second;
             int A_index = distances_vertices.at(1).second;
             int B_index = distances_vertices.at(2).second;
@@ -516,13 +513,13 @@ void draw_instance(SDL_Renderer *renderer, Instance &instance) {
         projected_vertices.push_back(project_vertex(vertex));
     }
     for (Triangle &triangle : instance.triangles) {
-        /*draw_wireframe_triangle(renderer, projected_vertices.at(triangle.A),*/
-        /*                        projected_vertices.at(triangle.B),*/
-        /*                        projected_vertices.at(triangle.C),
-         * triangle.color);*/
         draw_wireframe_triangle(renderer, projected_vertices.at(triangle.A),
                                 projected_vertices.at(triangle.B),
                                 projected_vertices.at(triangle.C), triangle.color);
+        /*draw_filled_triangle(renderer, projected_vertices.at(triangle.A),*/
+        /*                     projected_vertices.at(triangle.B),
+         * projected_vertices.at(triangle.C),*/
+        /*                     triangle.color);*/
     }
 }
 
@@ -548,9 +545,10 @@ Visibility is_instance_visible(Instance &instance, std::vector<Plane> planes) {
     return Visibility::FULL;
 }
 
-void render_scene(SDL_Renderer *renderer, Scene &scene) {
+void render_scene(SDL_Renderer *renderer, Scene &scene, Profiler profiler) {
     // clip_instance and draw_instance operate on instance in place
 
+    profiler.start(Profile::TRANSFORMING);
     // transform scene
     Matrix4D m_camera = make_camera_matrix(scene.camera.position, scene.camera.rotation_y);
 
@@ -560,7 +558,9 @@ void render_scene(SDL_Renderer *renderer, Scene &scene) {
         Matrix4D m_f = m_camera * m_transform;
         transformed_instances.push_back(transform_instance(instance, m_f));
     }
+    profiler.stop();
 
+    profiler.start(Profile::CLIPPING);
     // clip scene
     std::vector<Instance> clipped_instances;
     for (Instance &instance : transformed_instances) {
@@ -580,11 +580,16 @@ void render_scene(SDL_Renderer *renderer, Scene &scene) {
             break;
         }
     }
+    profiler.stop();
 
+    profiler.start(Profile::DRAWING);
     // draw scene
     for (Instance &instance : clipped_instances) {
         draw_instance(renderer, instance);
     }
+    profiler.stop();
+
+    profiler.draw_profiler_card();
 }
 
 int main(int argc, char *argv[]) {
@@ -609,6 +614,11 @@ int main(int argc, char *argv[]) {
     SDL_Event evt;
 
     Scene scene = create_scene();
+    Profiler profiler{};
+    profiler.register_profile(Profile::TRANSFORMING, "Time taken for transforming (ms): ");
+    profiler.register_profile(Profile::CLIPPING, "Time taken for clipping (ms): ");
+    profiler.register_profile(Profile::DRAWING, "Time taken for drawing (ms): ");
+
     bool run = true;
 
     double t{0.0};
@@ -680,7 +690,7 @@ int main(int argc, char *argv[]) {
         /*scene.instances.at(0).transform.rotation_y += y_rot_speed;*/
         /*scene.instances.at(1).transform.scale = 1.5 + sin(t);*/
         /*scene.instances.at(1).update_transform_matrix();*/
-        render_scene(renderer, scene);
+        render_scene(renderer, scene, profiler);
         SDL_RenderPresent(renderer);
         t += 0.011;
     }
