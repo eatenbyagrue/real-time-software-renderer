@@ -157,14 +157,16 @@ std::vector<double> interpolate(int i0, double d0, int i1, double d1) {
 }
 
 /*Draw point with x and y coordinates*/
-void draw_point(SDL_Renderer *renderer, int x, int y) {
+void draw_point(uint8_t *pixels, int x, int y, Color &color) {
     if (-WINDOW_WIDTH / 2 > x || x >= WINDOW_WIDTH / 2 || -WINDOW_HEIGHT / 2 > y ||
         y >= WINDOW_HEIGHT / 2) {
         return;
     }
     int draw_x = WINDOW_WIDTH / 2 + x;
     int draw_y = WINDOW_HEIGHT / 2 - y;
-    SDL_RenderDrawPoint(renderer, draw_x, draw_y);
+    pixels[(draw_x + (int)WINDOW_WIDTH * (draw_y - 1)) * 4] = color.r;
+    pixels[(draw_x + (int)WINDOW_WIDTH * (draw_y - 1)) * 4 + 1] = color.g;
+    pixels[(draw_x + (int)WINDOW_WIDTH * (draw_y - 1)) * 4 + 2] = color.b;
 }
 
 /*void draw_point(SDL_Renderer *renderer, int x, int y, Color &color) {*/
@@ -172,7 +174,7 @@ void draw_point(SDL_Renderer *renderer, int x, int y) {
 /*    SDL_RenderDrawPoint(renderer, x, y);*/
 /*}*/
 
-void draw_line(SDL_Renderer *renderer, Point p0, Point p1) {
+void draw_line(uint8_t *pixels, Point p0, Point p1, Color color) {
     int dx{p1.x - p0.x};
     int dy{p1.y - p0.y};
 
@@ -183,7 +185,7 @@ void draw_line(SDL_Renderer *renderer, Point p0, Point p1) {
         }
         std::vector ys = interpolate(p0.x, p0.y, p1.x, p1.y);
         for (int x = p0.x; x <= p1.x; ++x) {
-            draw_point(renderer, x, round(ys.at(x - p0.x)));
+            draw_point(pixels, x, round(ys.at(x - p0.x)), color);
         }
     } else {
         // Line is somewhat vertical-ish
@@ -192,7 +194,7 @@ void draw_line(SDL_Renderer *renderer, Point p0, Point p1) {
         }
         std::vector xs = interpolate(p0.y, p0.x, p1.y, p1.x);
         for (int y = p0.y; y <= p1.y; ++y) {
-            draw_point(renderer, round(xs.at(y - p0.y)), y);
+            draw_point(pixels, round(xs.at(y - p0.y)), y, color);
         }
     }
 }
@@ -214,17 +216,10 @@ std::vector<Point> gen_random_points(int count) {
     return random_points;
 }
 
-void draw_wireframe_triangle(SDL_Renderer *renderer, Point p0, Point p1, Point p2) {
-    draw_line(renderer, p0, p1);
-    draw_line(renderer, p1, p2);
-    draw_line(renderer, p2, p0);
-}
-
-void draw_wireframe_triangle(SDL_Renderer *renderer, Point p0, Point p1, Point p2, Color color) {
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-    draw_line(renderer, p0, p1);
-    draw_line(renderer, p1, p2);
-    draw_line(renderer, p2, p0);
+void draw_wireframe_triangle(uint8_t *pixels, Point &p0, Point &p1, Point &p2, Color &color) {
+    draw_line(pixels, p0, p1, color);
+    draw_line(pixels, p1, p2, color);
+    draw_line(pixels, p2, p0, color);
 }
 
 std::vector<double> concatenate(std::vector<double> &vec0, std::vector<double> &vec1) {
@@ -236,7 +231,7 @@ std::vector<double> concatenate(std::vector<double> &vec0, std::vector<double> &
     return concat;
 }
 
-void draw_filled_triangle(SDL_Renderer *renderer, Point p0, Point p1, Point p2, Color color) {
+void draw_filled_triangle(uint8_t *pixels, Point &p0, Point &p1, Point &p2, Color &color) {
     if (p1.y < p0.y)
         p1.swap(p0);
     if (p2.y < p0.y)
@@ -256,22 +251,20 @@ void draw_filled_triangle(SDL_Renderer *renderer, Point p0, Point p1, Point p2, 
     if (x02.at(m) < x012.at(m)) {
         for (int y = p0.y; y <= p2.y; ++y) {
             for (int x = round(x02[y - p0.y]); x <= x012[y - p0.y]; ++x) {
-                SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-                draw_point(renderer, x, y);
+                draw_point(pixels, x, y, color);
             }
         }
     } else {
         for (int y = p0.y; y <= p2.y; ++y) {
             for (int x = round(x012[y - p0.y]); x <= x02[y - p0.y]; ++x) {
-                SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-                draw_point(renderer, x, y);
+                draw_point(pixels, x, y, color);
             }
         }
     }
 }
 
 /* There are some bugs in here! */
-void draw_shaded_triangle(SDL_Renderer *renderer, Point &p0, Point &p1, Point &p2, Color &color) {
+void draw_shaded_triangle(uint8_t *pixels, Point &p0, Point &p1, Point &p2, Color &color) {
     if (p1.y < p0.y)
         p1.swap(p0);
     if (p2.y < p0.y)
@@ -315,8 +308,8 @@ void draw_shaded_triangle(SDL_Renderer *renderer, Point &p0, Point &p1, Point &p
         std::vector<double> h_segment = interpolate(x_l, h_left[y - p0.y], x_r, h_right[y - p0.y]);
         for (int x = x_l; x <= x_r; ++x) {
             double h = h_segment[x - x_l];
-            SDL_SetRenderDrawColor(renderer, h * color.r, h * color.g, h * color.b, 0);
-            draw_point(renderer, x, y);
+            /*SDL_SetRenderDrawColor(renderer, h * color.r, h * color.g, h * color.b, 0);*/
+            draw_point(pixels, x, y, color);
         }
     }
 }
@@ -508,20 +501,19 @@ Instance clip_instance(Instance &instance, std::vector<Plane> planes) {
     return clipped_instance;
 };
 
-void draw_instance(SDL_Renderer *renderer, Instance &instance) {
+void draw_instance(uint8_t *pixels, Instance &instance) {
     std::vector<Point> projected_vertices;
 
     for (Vec4D &vertex : instance.vertices) {
         projected_vertices.push_back(project_vertex(vertex));
     }
     for (Triangle &triangle : instance.triangles) {
-        draw_wireframe_triangle(renderer, projected_vertices.at(triangle.A),
-                                projected_vertices.at(triangle.B),
-                                projected_vertices.at(triangle.C), triangle.color);
-        /*draw_filled_triangle(renderer, projected_vertices.at(triangle.A),*/
-        /*                     projected_vertices.at(triangle.B),
-         * projected_vertices.at(triangle.C),*/
-        /*                     triangle.color);*/
+        /*draw_wireframe_triangle(pixels, projected_vertices.at(triangle.A),*/
+        /*                        projected_vertices.at(triangle.B),*/
+        /*                        projected_vertices.at(triangle.C), triangle.color);*/
+        draw_filled_triangle(pixels, projected_vertices.at(triangle.A),
+                             projected_vertices.at(triangle.B), projected_vertices.at(triangle.C),
+                             triangle.color);
     }
 }
 
@@ -547,7 +539,7 @@ Visibility is_instance_visible(Instance &instance, std::vector<Plane> planes) {
     return Visibility::FULL;
 }
 
-void render_scene(SDL_Renderer *renderer, Scene &scene, Profiler profiler) {
+void render_scene(uint8_t *pixels, Scene &scene, Profiler profiler) {
     // clip_instance and draw_instance operate on instance in place
 
     profiler.start(Profile::TRANSFORMING);
@@ -587,7 +579,7 @@ void render_scene(SDL_Renderer *renderer, Scene &scene, Profiler profiler) {
     profiler.start(Profile::DRAWING);
     // draw scene
     for (Instance &instance : clipped_instances) {
-        draw_instance(renderer, instance);
+        draw_instance(pixels, instance);
     }
     profiler.stop();
 
@@ -657,16 +649,6 @@ int main(int argc, char *argv[]) {
     pixels[(int)WINDOW_WIDTH * (int)WINDOW_HEIGHT * 4 - 4 * 2] = 255;
     pixels[(int)WINDOW_WIDTH * (int)WINDOW_HEIGHT * 4 - 4 * 3] = 255;
 
-    // update texture with new data
-    int texture_pitch = 0;
-    void *texture_pixels = NULL;
-    if (SDL_LockTexture(sdl.texture, NULL, &texture_pixels, &texture_pitch) != 0) {
-        SDL_Log("Unable to lock texture: %s", SDL_GetError());
-    } else {
-        memcpy(texture_pixels, pixels, texture_pitch * (int)WINDOW_HEIGHT);
-    }
-    SDL_UnlockTexture(sdl.texture);
-
     bool run = true;
 
     double t{0.0};
@@ -675,7 +657,7 @@ int main(int argc, char *argv[]) {
     double z_offset = 0.0;
 
     Vec4D camera_speed;
-    camera_speed.set_0();
+
     // game loop
     while (run) {
 
@@ -738,8 +720,22 @@ int main(int argc, char *argv[]) {
         /*scene.instances.at(0).transform.rotation_y += y_rot_speed;*/
         /*scene.instances.at(1).transform.scale = 1.5 + sin(t);*/
         /*scene.instances.at(1).update_transform_matrix();*/
-        /*render_scene(sdl.renderer, scene, profiler);*/
         /*SDL_RenderPresent(sdl.renderer);*/
+
+        // Set all values of pixel buffer to 0
+        memset(pixels, 0x00, sizeof(pixels) / sizeof(uint8_t));
+
+        render_scene(pixels, scene, profiler);
+
+        // update texture with new data
+        int texture_pitch = 0;
+        void *texture_pixels = NULL;
+        if (SDL_LockTexture(sdl.texture, NULL, &texture_pixels, &texture_pitch) != 0) {
+            SDL_Log("Unable to lock texture: %s", SDL_GetError());
+        } else {
+            memcpy(texture_pixels, pixels, texture_pitch * (int)WINDOW_HEIGHT);
+        }
+        SDL_UnlockTexture(sdl.texture);
 
         SDL_RenderClear(sdl.renderer);
         SDL_RenderCopy(sdl.renderer, sdl.texture, NULL, NULL);
