@@ -635,19 +635,6 @@ int main(int argc, char *argv[]) {
     profiler.register_profile(Profile::DRAWING, "Time taken for drawing (ms): ");
 
     uint8_t pixels[(int)WINDOW_WIDTH * (int)WINDOW_HEIGHT * 4] = {0};
-    std::cout << sizeof(pixels) / sizeof(uint8_t) << "\n";
-    pixels[4 * 0 + 1] = 255;
-    pixels[4 * 1 + 1] = 255;
-    pixels[4 * 2 + 1] = 255;
-    pixels[46400 + 4 * 0 + 0] = 255;
-    pixels[46400 + 4 * 1 + 1] = 255;
-    pixels[46400 + 4 * 2 + 2] = 255;
-    pixels[46400 + 4 * 3 + 0] = 255;
-    pixels[46400 + 4 * 4 + 1] = 255;
-    pixels[46400 + 4 * 5 + 2] = 255;
-    pixels[(int)WINDOW_WIDTH * (int)WINDOW_HEIGHT * 4 - 4 * 1] = 255;
-    pixels[(int)WINDOW_WIDTH * (int)WINDOW_HEIGHT * 4 - 4 * 2] = 255;
-    pixels[(int)WINDOW_WIDTH * (int)WINDOW_HEIGHT * 4 - 4 * 3] = 255;
 
     bool run = true;
 
