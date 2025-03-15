@@ -1,7 +1,9 @@
-#include "SDL2/SDL.h"
+/*#include "SDL2/SDL.h"*/
+#include <SDL.h>
 /*#include "SDL_events.h"*/
 /*#include "SDL_render.h"*/
 #include "SDL_scancode.h"
+#include "SDL_video.h"
 #include "linalg.hpp"
 #include "profiler.hpp"
 #include <algorithm>
@@ -592,32 +594,78 @@ void render_scene(SDL_Renderer *renderer, Scene &scene, Profiler profiler) {
     profiler.draw_profiler_card();
 }
 
-int main(int argc, char *argv[]) {
+struct SetupSDLObject {
+    SDL_Renderer *renderer;
+    SDL_Window *screen;
+    SDL_Texture *texture;
+    SDL_Event event;
+};
+
+SetupSDLObject setup_SDL() {
+
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        fprintf(stderr, "Could not init SDL: %s\n", SDL_GetError());
-        return 1;
+        SDL_Log("Could not init SDL: %s", SDL_GetError());
+        throw "SDL Error";
     }
 
     SDL_Window *screen = SDL_CreateWindow("My application", SDL_WINDOWPOS_UNDEFINED,
                                           SDL_WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT, 0);
     if (!screen) {
-        fprintf(stderr, "Could not create window\n");
-        return 1;
+        SDL_Log("Could not create window: %s", SDL_GetError());
+        throw "SDL Error!";
     }
 
     SDL_Renderer *renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_SOFTWARE);
     if (!renderer) {
-        fprintf(stderr, "Could not create renderer\n");
-        return 1;
+        SDL_Log("Could not create renderer: %s", SDL_GetError());
+        throw "SDL Error!";
     }
 
-    SDL_Event evt;
+    SDL_Texture *texture = SDL_CreateTexture(
+        renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, WINDOW_WIDTH, WINDOW_HEIGHT);
+    if (texture == NULL) {
+        SDL_Log("Unable to create texture: %s", SDL_GetError());
+        throw;
+    }
+
+    SDL_Event event;
+
+    return SetupSDLObject{renderer, screen, texture, event};
+}
+
+int main(int argc, char *argv[]) {
+    SetupSDLObject sdl = setup_SDL();
 
     Scene scene = create_scene();
     Profiler profiler{};
     profiler.register_profile(Profile::TRANSFORMING, "Time taken for transforming (ms): ");
     profiler.register_profile(Profile::CLIPPING, "Time taken for clipping (ms): ");
     profiler.register_profile(Profile::DRAWING, "Time taken for drawing (ms): ");
+
+    uint8_t pixels[(int)WINDOW_WIDTH * (int)WINDOW_HEIGHT * 4] = {0};
+    std::cout << sizeof(pixels) / sizeof(uint8_t) << "\n";
+    pixels[4 * 0 + 1] = 255;
+    pixels[4 * 1 + 1] = 255;
+    pixels[4 * 2 + 1] = 255;
+    pixels[46400 + 4 * 0 + 0] = 255;
+    pixels[46400 + 4 * 1 + 1] = 255;
+    pixels[46400 + 4 * 2 + 2] = 255;
+    pixels[46400 + 4 * 3 + 0] = 255;
+    pixels[46400 + 4 * 4 + 1] = 255;
+    pixels[46400 + 4 * 5 + 2] = 255;
+    pixels[(int)WINDOW_WIDTH * (int)WINDOW_HEIGHT * 4 - 4 * 1] = 255;
+    pixels[(int)WINDOW_WIDTH * (int)WINDOW_HEIGHT * 4 - 4 * 2] = 255;
+    pixels[(int)WINDOW_WIDTH * (int)WINDOW_HEIGHT * 4 - 4 * 3] = 255;
+
+    // update texture with new data
+    int texture_pitch = 0;
+    void *texture_pixels = NULL;
+    if (SDL_LockTexture(sdl.texture, NULL, &texture_pixels, &texture_pitch) != 0) {
+        SDL_Log("Unable to lock texture: %s", SDL_GetError());
+    } else {
+        memcpy(texture_pixels, pixels, texture_pitch * (int)WINDOW_HEIGHT);
+    }
+    SDL_UnlockTexture(sdl.texture);
 
     bool run = true;
 
@@ -632,20 +680,20 @@ int main(int argc, char *argv[]) {
     while (run) {
 
         // process OS events
-        while (SDL_PollEvent(&evt) != 0) {
-            switch (evt.type) {
+        while (SDL_PollEvent(&sdl.event) != 0) {
+            switch (sdl.event.type) {
             case SDL_QUIT:
                 run = false;
                 break;
             case SDL_KEYDOWN:
-                if (evt.key.keysym.scancode == SDL_SCANCODE_LEFT) {
+                if (sdl.event.key.keysym.scancode == SDL_SCANCODE_LEFT) {
                     y_rot_speed = 0.005;
-                } else if (evt.key.keysym.scancode == SDL_SCANCODE_RIGHT) {
+                } else if (sdl.event.key.keysym.scancode == SDL_SCANCODE_RIGHT) {
                     y_rot_speed = -0.005;
                 }
-                if (evt.key.keysym.scancode == SDL_SCANCODE_UP) {
+                if (sdl.event.key.keysym.scancode == SDL_SCANCODE_UP) {
                     camera_speed = scene.camera.orientation * 0.01;
-                } else if (evt.key.keysym.scancode == SDL_SCANCODE_DOWN) {
+                } else if (sdl.event.key.keysym.scancode == SDL_SCANCODE_DOWN) {
                     camera_speed = -scene.camera.orientation * 0.01;
                 }
 
@@ -655,21 +703,21 @@ int main(int argc, char *argv[]) {
                 /*<<
                  * SDL_GetScancodeName(static_cast<SDL_Scancode>(evt.key.keysym.scancode))*/
                 /*<< ")\n";*/
-                /*std::cout << "Scancode " << event.key.keysym.scancode <<
+                /*std::cout << "Scancode " << sdl.event.key.keysym.scancode <<
                  * "\n";*/
-                /*std::cout << "Sym " << SDL_GetKeyName(event.key.keysym.sym) <<
+                /*std::cout << "Sym " << SDL_GetKeyName(sdl.event.key.keysym.sym) <<
                  * "\n";*/
                 /*}*/
                 break;
             case SDL_KEYUP:
-                if (evt.key.keysym.scancode == SDL_SCANCODE_LEFT) {
+                if (sdl.event.key.keysym.scancode == SDL_SCANCODE_LEFT) {
                     y_rot_speed = 0.0;
-                } else if (evt.key.keysym.scancode == SDL_SCANCODE_RIGHT) {
+                } else if (sdl.event.key.keysym.scancode == SDL_SCANCODE_RIGHT) {
                     y_rot_speed = 0.0;
                 }
-                if (evt.key.keysym.scancode == SDL_SCANCODE_UP) {
+                if (sdl.event.key.keysym.scancode == SDL_SCANCODE_UP) {
                     camera_speed.set_0();
-                } else if (evt.key.keysym.scancode == SDL_SCANCODE_DOWN) {
+                } else if (sdl.event.key.keysym.scancode == SDL_SCANCODE_DOWN) {
                     camera_speed.set_0();
                 }
                 break;
@@ -684,18 +732,25 @@ int main(int argc, char *argv[]) {
                                        .times(scene.camera.original_orientation);
         scene.camera.position += camera_speed;
 
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
+        /*SDL_SetRenderDrawColor(sdl.renderer, 0, 0, 0, 0);*/
+        /*SDL_RenderClear(sdl.renderer);*/
 
         /*scene.instances.at(0).transform.rotation_y += y_rot_speed;*/
         /*scene.instances.at(1).transform.scale = 1.5 + sin(t);*/
         /*scene.instances.at(1).update_transform_matrix();*/
-        render_scene(renderer, scene, profiler);
-        SDL_RenderPresent(renderer);
+        /*render_scene(sdl.renderer, scene, profiler);*/
+        /*SDL_RenderPresent(sdl.renderer);*/
+
+        SDL_RenderClear(sdl.renderer);
+        SDL_RenderCopy(sdl.renderer, sdl.texture, NULL, NULL);
+        SDL_RenderPresent(sdl.renderer);
+
         t += 0.011;
     }
     // clean up
-    SDL_DestroyWindow(screen);
+    SDL_DestroyTexture(sdl.texture);
+    SDL_DestroyRenderer(sdl.renderer);
+    SDL_DestroyWindow(sdl.screen);
     SDL_Quit();
     return 0;
 }
